@@ -1,5 +1,5 @@
 {
-  "name": "ever-audience",
+  "name": "chrome-extension-scaffold",
   "version": "1.0.0",
   "description": "",
   "main": "index.js",
@@ -23,6 +23,6 @@
     "prod": "webpack -p",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
-  "author": "Hacketing <support@hacketing.io>",
+  "author": "Sisir K. Adhikari <contact@sisir.me>",
   "license": "ISC"
 }
