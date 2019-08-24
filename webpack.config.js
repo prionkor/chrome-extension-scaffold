@@ -1,77 +1,108 @@
-const path = require('path');
-const TerserPlugin = require('terser-webpack-plugin');
+const webpack = require('webpack');
+const ejs = require('ejs');
+const MiniCssExtractPlugin = require('mini-css-extract-plugin');
+const CopyWebpackPlugin = require('copy-webpack-plugin');
+const ChromeExtensionReloader = require('webpack-chrome-extension-reloader');
 const FixStyleOnlyEntriesPlugin = require("webpack-fix-style-only-entries");
+const { version } = require('./package.json');
 
-module.exports = {
-    mode: 'development',
-    target: 'web',
-    externals: {
-        jquery: 'jQuery',
-        moment: 'moment',
-        "chart.js": 'Chart',
-        clipboard: 'ClipboardJS',
-        //select2: 'select2'
-    },
-    entry: {
-        popup: "./src/scripts/popup.js",
-        popupCss: "./src/styles/popup.scss",
-    },
-    output: {
-        path: path.resolve(__dirname, "dist/scripts/js"),
-        filename: '[name].min.js',
-        publicPath: "dist/scripts/js"
-    },
-    module:{
-        rules:[
-            { 
-                test: /\.(woff|woff2|eot|ttf|svg)$/, 
-                loader: 'url-loader?limit=100000&name=../fonts/[name].[ext]' 
-            },
-            { 
-                test: /\.(jpg|jpeg|png|gif)$/, 
-                loader: 'url-loader?limit=100000&name=../images/[name].[ext]'
-            },
-            {
-                test:/\.(s*)css$/,
-                use:[
-                    {
-						loader: 'file-loader',
-						options: {
-							name: '../css/[name].css',
-						}
-                    },
-                    {
-						loader: 'extract-loader'
-					},
-					{
-						loader: 'css-loader?-url'
-					},
-					{
-						loader: 'postcss-loader'
-					},
-					{
-						loader: 'sass-loader'
-					}
-                ]
-            }
-            
-        ]
-    },
-    optimization: {
-        minimizer: [
-            new TerserPlugin({
-                cache: true,
-                parallel: true,
-                terserOptions: {
-                    mangle: true,
-                    output: {comments: false}
-                },
-                sourceMap: true // set to true if you want JS source maps
-            }),
-            //new OptimizeCSSAssetsPlugin({})
-        ]
-    },
-    plugins: [
-        new FixStyleOnlyEntriesPlugin()
+const config = {
+  mode: process.env.NODE_ENV || 'development',
+  context: __dirname + '/src',
+  entry: {
+    background: './background.js',
+    content: './content.js',
+    'popup/popup': './popup/popup.js',
+  },
+  output: {
+    path: __dirname + '/dist',
+    filename: '[name].js',
+  },
+  resolve: {
+    extensions: ['.js', '.vue'],
+  },
+  module: {
+    rules: [
+      {
+        test: /\.vue$/,
+        loaders: 'vue-loader',
+      },
+      {
+        test: /\.js$/,
+        loader: 'babel-loader',
+        exclude: /node_modules/,
+      },
+      {
+        test: /\.css$/,
+        use: [MiniCssExtractPlugin.loader, 'css-loader'],
+      },
+      {
+        test: /\.scss$/,
+        use: [MiniCssExtractPlugin.loader, 'css-loader', 'sass-loader'],
+      },
+      {
+        test: /\.sass$/,
+        use: [MiniCssExtractPlugin.loader, 'css-loader', 'sass-loader?indentedSyntax'],
+      },
+      {
+        test: /\.(png|jpg|gif|svg|ico)$/,
+        loader: 'file-loader',
+        options: {
+          name: '[name].[ext]?emitFile=false',
+        },
+      },
     ],
+  },
+  plugins: [
+    new FixStyleOnlyEntriesPlugin(),
+    new webpack.DefinePlugin({
+      global: 'window',
+    }),
+    new MiniCssExtractPlugin({
+      filename: '[name].css',
+    }),
+    new CopyWebpackPlugin([
+      { from: 'icons', to: 'icons', ignore: ['icon.xcf'] },
+      { from: 'images', to: 'images' },
+      { from: 'popup/popup.html', to: 'popup/popup.html', transform: transformHtml },
+      {
+        from: 'manifest.json',
+        to: 'manifest.json',
+        transform: content => {
+          const jsonContent = JSON.parse(content);
+          jsonContent.version = version;
+
+          if (config.mode === 'development') {
+            jsonContent['content_security_policy'] = "script-src 'self' 'unsafe-eval'; object-src 'self'";
+          }
+
+          return JSON.stringify(jsonContent, null, 2);
+        },
+      },
+    ]),
+  ],
+};
+
+if (config.mode === 'production') {
+  config.plugins = (config.plugins || []).concat([
+    new webpack.DefinePlugin({
+      'process.env': {
+        NODE_ENV: '"production"',
+      },
+    }),
+  ]);
 }
+
+if (process.env.HMR === 'true') {
+  config.plugins = (config.plugins || []).concat([
+    new ChromeExtensionReloader(),
+  ]);
+}
+
+function transformHtml(content) {
+  return ejs.render(content.toString(), {
+    ...process.env,
+  });
+}
+
+module.exports = config;
